@@ -1,0 +1,399 @@
+
+library(Hmisc)
+library(lme4)
+library(ggpubr)
+library(forcats)
+library(dplyr)
+library(MuMIn)
+library(performance)
+library(esvis)
+library(readxl)
+library(cowplot)
+# Descriptives
+
+vervet_data <- read_excel("/Users/lindseyellington/MSc thesis/Data for R/Data_all_groups.excel.xlsx")
+str(vervet_data)
+#Group types and names
+colnames(vervet_data)[colnames(vervet_data) == "Group type"] <- "Group.type"
+colnames(vervet_data)[colnames(vervet_data) == "Nr approaches"] <- "Nr.approaches"
+colnames(vervet_data)[colnames(vervet_data) == "Nr exploration events"] <- "Nr.exploration.events"
+colnames(vervet_data)[colnames(vervet_data) == "Nr exploration events"] <- "Nr.exploration.events"
+colnames(vervet_data)[colnames(vervet_data) == "Group size"] <- "Group.size"
+colnames(vervet_data)[colnames(vervet_data) == "Nr Social Appr"] <- "Nr.Social.Appr"
+colnames(vervet_data)[colnames(vervet_data) == "Nr Individual Appr"] <- "Nr.Individual.Appr"
+colnames(vervet_data)[colnames(vervet_data) == "rate social appr"] <- "rate.social.appr"
+
+unique(vervet_data[,c('Group','Group.type')])#7 groups: 4 wild habituated, 1 unhabituated and 2 captive
+#Correct spelling mistakes
+vervet_data[vervet_data=="N.A"] <- NA
+#change variable type
+#vervet_data$Nr.individuals.tasted.NF <- as.numeric(as.character(vervet_data$Nr.individuals.tasted.NF))
+#change variable names
+names(vervet_data)[names(vervet_data) == 'Novelty'] <- "Object.type"
+names(vervet_data)[names(vervet_data) == 'Category'] <- "Object"
+str(vervet_data)
+#change habituation index to continuous
+#vervet_data$Habituation.index <- as.numeric(as.character(vervet_data$Habituation.index))
+#center habituation index
+#vervet_data$z.hi=as.vector(scale(vervet_data$Habituation.index))
+vervet_data <- vervet_data[-3, ]
+
+
+##remove larger groups
+vervet_data <- subset(vervet_data, !(Group %in% c("Noha", "Boata", "Baie Donke")))
+###Remove Acacia snail shells
+vervet_data <- subset(vervet_data, !(Object %in% c("Snail shells")))
+
+### Model 1a Plot differences in number of approaches based on group type
+###### Figure 1#########
+means_grouptype <- tapply(vervet_data$Nr.approaches,vervet_data$Group.type, mean)
+means_grouptype
+
+cols=c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+plot(as.factor(vervet_data$Group.type), vervet_data$Nr.approaches,
+     xlab="Group type", ylab="Nr. of approaches", boxfill=cols, outline=F)
+stripchart(vervet_data$Nr.approaches~as.factor(vervet_data$Group.type), vertical = TRUE, data = vervet_data, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+
+hll=0.38
+segments(x0=(1:3)-hll, x1=(1:3)+hll,
+         y0=means_grouptype,
+         y1=means_grouptype,
+         col = "black", lty=5)# lines are the means of each group
+
+means_grouptype <- tapply(vervet_data$Nr.approaches, vervet_data$Group.type, mean)
+cols <- c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+# Set the y-axis limit to 40
+ylim <- c(0, 40)
+
+plot(as.factor(vervet_data$Group.type), vervet_data$Nr.approaches,
+     xlab="Group type", ylab="Nr. of approaches", boxfill=cols, outline=F, ylim=ylim)
+
+stripchart(vervet_data$Nr.approaches ~ as.factor(vervet_data$Group.type), vertical=TRUE, data=vervet_data,
+           method="jitter", add=TRUE, pch=19, col=rgb(0, 0, 0, 0.25))
+
+hll <- 0.38
+segments(x0=(1:3) - hll, x1=(1:3) + hll,
+         y0=means_grouptype,
+         y1=means_grouptype,
+         col="black", lty=5)
+
+
+
+
+#create a plot with just butterflies Approaches
+
+subset_butterflies <- vervet_data[vervet_data$Object == "Butterflies", ]
+
+
+plot(as.factor(subset_butterflies$Group.type), subset_butterflies$Nr.approaches,
+     xlab="Group type", ylab="Nr. of approaches", boxfill=cols, outline=F)
+stripchart(subset_butterflies$Nr.approaches~as.factor(subset_butterflies$Group.type), vertical = TRUE, data = subset_butterflies, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+#create a plot with just seashells Approaches
+
+subset_seashells <- vervet_data[vervet_data$Object == "Seashells", ]
+
+plot(as.factor(subset_seashells$Group.type), subset_seashells$Nr.approaches,
+     xlab="Group type", ylab="Nr. of approaches", boxfill=cols, outline=F)
+stripchart(subset_seashells$Nr.approaches~as.factor(subset_seashells$Group.type), vertical = TRUE, data = subset_seashells, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+
+####barplots
+####butterflies
+####Exploration score###
+means_df <- aggregate(Nr.exploration.events ~ Group.type, data = subset_butterflies, FUN = mean)
+
+# Set up colors
+cols <- c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+# Create a bar plot with a title
+barplot(means_df$Nr.exploration.events, names.arg = means_df$Group.type,
+        col = cols, ylim = c(0, max(means_df$Nr.exploration.events) + 5),
+        xlab = "Group type", ylab = "Mean Nr. of exploratory events", beside = TRUE,
+        main = "Butterflies")
+
+# Add individual points on top of the bars for the original data
+stripchart(subset_butterflies$Nr.exploration.events ~ as.factor(subset_butterflies$Group.type),
+           vertical = TRUE, data = subset_butterflies,
+           method = "jitter", add = TRUE, pch = 19, col = rgb(0, 0, 0, 0.25))
+
+###nr of approaches###
+# Create a dataframe with mean values for each group
+means_df <- aggregate(Nr.approaches ~ Group.type, data = subset_butterflies, FUN = mean)
+
+# Set up colors
+cols <- c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+# Create a bar plot
+barplot(means_df$Nr.approaches, names.arg = means_df$Group.type,
+        col = cols, ylim = c(0, max(means_df$Nr.approaches) + 5),
+        xlab = "Group type", ylab = "Mean Nr. Approaches", beside = TRUE,
+        main = "Butterflies")
+
+
+# Add individual points on top of the bars for the original data
+stripchart(subset_butterflies$Nr.approaches ~ as.factor(subset_butterflies$Group.type),
+           vertical = TRUE, data = subset_butterflies,
+           method = "jitter", add = TRUE, pch = 19, col = rgb(0, 0, 0, 0.25))
+
+###seashells
+means_df_seashells <- aggregate(Nr.exploration.events ~ Group.type, data = subset_seashells, FUN = mean)
+
+# Set up colors
+cols_seashells <- c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+# Create a bar plot
+barplot(means_df_seashells$Nr.exploration.events, names.arg = means_df_seashells$Group.type,
+        col = cols_seashells, ylim = c(0, max(means_df_seashells$Nr.exploration.events) + 5),
+        xlab = "Group type", ylab = "Mean Nr.exploratory events", beside = TRUE,
+        main = "Seashells")
+
+# Add individual points on top of the bars for the original data
+stripchart(subset_seashells$Nr.exploration.events ~ as.factor(subset_seashells$Group.type),
+           vertical = TRUE, data = subset_seashells,
+           method = "jitter", add = TRUE, pch = 19, col = rgb(0, 0, 0, 0.25))
+
+###Nr approaches
+means_df_seashells <- aggregate(Nr.approaches ~ Group.type, data = subset_seashells, FUN = mean)
+
+# Set up colors
+cols_seashells <- c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+# Create a bar plot
+barplot(means_df_seashells$Nr.approaches, names.arg = means_df_seashells$Group.type,
+        col = cols_seashells, ylim = c(0, max(means_df_seashells$Nr.approaches) + 5),
+        xlab = "Group type", ylab = "Mean Nr. of approaches", beside = TRUE,
+        main = "Seashells")
+
+# Add individual points on top of the bars for the original data
+stripchart(subset_seashells$Nr.approaches ~ as.factor(subset_seashells$Group.type),
+           vertical = TRUE, data = subset_seashells,
+           method = "jitter", add = TRUE, pch = 19, col = rgb(0, 0, 0, 0.25))
+
+
+###Combined plot
+######figure 3#######
+
+# Load the cowplot and ggplot2 packages
+library(cowplot)
+library(ggplot2)
+
+# Define the exact colors
+cols <- c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+# Function to create a plot with specified title and y-axis label
+create_plot <- function(data, title) {
+  ggplot(data) +
+    geom_bar(aes(x = as.factor(data$Group.type),
+                 y = data$Nr.exploration.events,
+                 fill = as.factor(data$Group.type)),
+             stat = "identity") +
+    geom_jitter(aes(x = as.factor(data$Group.type),
+                    y = data$Nr.exploration.events),
+                width = 0.2, alpha = 0.5, color = "black") +
+    geom_errorbar(aes(x = as.factor(data$Group.type),
+                      ymin = data$Nr.exploration.events - data$SD,
+                      ymax = data$Nr.exploration.events + data$SD),
+                  width = 0.2, position = position_dodge(0.8), color = "black") +  # Add error bars
+    labs(title = title,
+         x = NULL,  # Remove x-axis label
+         y = NULL) +  # Remove y-axis label
+    scale_fill_manual(values = cols) +  # Set fill colors manually
+    theme_minimal() +
+    theme(legend.position = "none",  # Remove legend
+          axis.text.x = element_blank(),  # Remove x-axis tick labels
+          axis.title.x = element_blank(),  # Remove x-axis title
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(), 
+          text = element_text(size = 12, face = "bold"))  # Increase text size and make it bold
+}
+
+# Create a mock dataset with SD values for demonstration purposes
+subset_butterflies$SD <- runif(nrow(subset_butterflies), 1, 5)
+subset_seashells$SD <- runif(nrow(subset_seashells), 1, 5)
+
+# Create plots
+plot_butterflies <- create_plot(subset_butterflies, "Butterflies")
+plot_seashells <- create_plot(subset_seashells, "Seashells")
+
+# Combine the plots without labels
+combined_plot <- plot_grid(
+  plot_butterflies, plot_seashells,
+  ncol = 2, align = "hv"
+)
+
+# Show the combined plot
+print(combined_plot)
+
+
+
+
+
+
+
+#######Figure 2#######
+# Plot differences in number of exploration events based on group type
+means_grouptype <- tapply(vervet_data$Nr.exploration.events,vervet_data$Group.type, mean)
+means_grouptype
+
+cols=c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+plot(as.factor(vervet_data$Group.type), vervet_data$Nr.exploration.events,
+     xlab="Group type", ylab="Nr. of exploratory events", boxfill=cols, outline=F)
+stripchart(vervet_data$Nr.exploration.events~as.factor(vervet_data$Group.type), vertical = TRUE, data = vervet_data, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+hll=0.38
+segments(x0=(1:3)-hll, x1=(1:3)+hll,
+         y0=means_grouptype,
+         y1=means_grouptype,
+         col = "black", lty=5)# lines are the means of each group
+### Model 1a Plot group ID
+
+meansgroups <- tapply(vervet_data$Nr.approaches,vervet_data$Group, mean)
+meansgroups
+bu <- sort(unique(vervet_data$Group))
+
+xlabels <- rep(bu, each=8)
+
+cols=c( "#FFCC66", "#009999", "#990033","#CC66FF","#009933","#6699FF", "#CCFFFF", "chocolate1")
+plot(as.factor(vervet_data$Group), vervet_data$Nr.approaches,
+     xlab="Group ID", ylab="Nr. of approaches", boxfill=cols, outline=F) 
+# Add data points
+stripchart(vervet_data$Nr.approaches~as.factor(vervet_data$Group), vertical = TRUE, data = vervet_data, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+##exploratory events
+meansgroups
+bu <- sort(unique(vervet_data$Group))
+
+xlabels <- rep(bu, each=8)
+
+cols=c( "#FFCC66", "#009999", "#990033","#CC66FF","#009933","#6699FF", "#CCFFFF", "chocolate1")
+plot(as.factor(vervet_data$Group), vervet_data$Nr.exploration.events,
+     xlab="Group ID", ylab="Nr. of exploratory events", boxfill=cols, outline=F) 
+# Add data points
+stripchart(vervet_data$Nr.exploration.events~as.factor(vervet_data$Group), vertical = TRUE, data = vervet_data, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+###differences between butterflies and seashells
+
+
+vervet_data$Object <- factor(vervet_data$Object, levels = c("Butterflies","Seashells"))
+
+plot(vervet_data$Object, vervet_data$Nr.approaches,
+     xlab="Novel stimuli", ylab="Nr. of approaches", outline=F, ylim=c(0,100)) 
+
+
+#########Model1a##########
+
+
+
+
+vervet_data <- mutate(vervet_data,
+                      familiarity = ifelse(Group == "Acacia" & Object == "Seashells", "familiar",
+                                           ifelse(Group %in% c("Kubu", "Poena", "Lemontree", "Congo") & Object == "Butterflies", "novel", NA)))
+
+# Replace NAs with "novel"
+vervet_data$familiarity <- replace(vervet_data$familiarity, is.na(vervet_data$familiarity), "novel")
+
+
+Model1a <- glmmTMB(Nr.approaches ~ Group.type+Object+(1|Group) + offset(log(Group.size)), data = vervet_data, family = poisson)
+nullapproach=glmmTMB(Nr.approaches~1+(1|Group)+offset(log(Group.size)), data=vervet_data, family = poisson)
+anova(nullapproach,Model1a, test="Chisq")
+summary(Model1a)
+drop1(Model1a, test = "Chisq")
+
+# Perform the likelihood ratio test
+lr_test <- anova(Model1a, nullapproach, test = "Chisq")
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+r.squaredGLMM(Model1a)
+check_overdispersion(Model1a)
+
+
+
+
+####run model with only butterflies and seashells (exploration.score)###
+#model structure
+Model1b=glmmTMB(Nr.exploration.events~Group.type+Object +(1|Group) + offset(log(Group.size)), data=vervet_data, family = poisson)
+nullapproach=glmmTMB(Nr.exploration.events~1+(1|Group)+offset(log(Group.size)), data=vervet_data, family = poisson)
+anova(nullapproach,Model1b, test="Chisq")
+summary(Model1b)
+
+# Perform the likelihood ratio test
+lr_test <- anova(Model1b, nullapproach, test = "Chisq")
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+r.squaredGLMM(Model1b)
+#1. Overdispersion
+check_overdispersion(Model1b)
+###overdispersed
+#2. Check distribution of random effect
+ranef(Model1b)
+drop1(Model1b, test = "Chisq") #
+
+
+
+###negative binomial
+Model1b <- glmmTMB(Nr.exploration.events ~ Group.type*Object + (1 | Group) + offset(log(Group.size)), data = vervet_data, family = nbinom1)
+nullapproach=glmmTMB(Nr.exploration.events~1+(1|Group)+offset(log(Group.size)), data=vervet_data, family = nbinom1)
+anova(nullapproach,Model1b, test="Chisq")
+summary(Model1b)
+drop1(Model1b, test = "Chisq") #
+# Perform the likelihood ratio test
+lr_test <- anova(Model1b, nullapproach, test = "Chisq")
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+r.squaredGLMM(Model1b)
+#1. Overdispersion
+check_overdispersion(Model1b)
+###overdispersed
+#2. Check distribution of random effect
+ranef(Model1b)
+drop1(Model1b, test = "Chisq") #
+AIC(Model1b)
+BIC(Model1b)
+
+
+###seeing the effect of captive
+# Create a new variable to represent the comparison of interest
+vervet_data$Comparison <- ifelse(vervet_data$Group.type == "captive", "captive", "other")
+
+# Convert the new variable to a factor
+vervet_data$Comparison <- factor(vervet_data$Comparison)
+
+# Fit the model again with the new variable
+your_model <- glmmTMB(Nr.exploration.events ~ Comparison*Object + (1|Group) + offset(log(Group.size)), data = vervet_data, family = poisson)
+
+# Print the updated model summary
+summary(your_model)
+
+
+emm <- emmeans(Model1b, ~ Group.type)  # Calculate EMMs for the 'Group.id' variable
+pairs(emm)    
+
+
