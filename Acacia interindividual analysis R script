@@ -1,0 +1,1080 @@
+rm(list=ls())
+
+library(Hmisc)
+library(lme4)
+library(ggpubr)
+library(forcats)
+library(dplyr)
+library(MuMIn)
+library(performance)
+library(esvis)
+library(readxl)
+library(glmmTMB)
+library(pscl)
+library(sjPlot)
+library(car)
+library(emmeans)
+library(forestplot)
+library(multcomp)
+library(DHARMa)
+library(readxl)
+#model predictors of exploration score 
+source("/Users/lindseyellington/Downloads/diagnostic_fcns.r")
+
+######Individual analysis Acacia only######
+Acacia_data <- read_excel("/Users/lindseyellington/MSc thesis/Data for R/Acacia.xlsx", sheet = "Combined with 0s")
+Acacia_datano0s <- read_excel("/Users/lindseyellington/MSc thesis/Data for R/Acacia.xlsx", sheet = "Combined")
+colnames(Acacia_data)[colnames(Acacia_data) == "Exploration score"] <- "Exploration.score"
+colnames(Acacia_data)[colnames(Acacia_data) == "Age category"] <- "Age.Category"
+colnames(Acacia_data)[colnames(Acacia_data) == "Nr grid approaches"] <- "nr.grid.appr"
+colnames(Acacia_data)[colnames(Acacia_data) == "Group Size"] <- "Group.size"
+colnames(Acacia_data)[colnames(Acacia_data) == "Touch (Nr times)"] <- "Nr.touched"
+colnames(Acacia_data)[colnames(Acacia_data) == "Sniff (Nr times)"] <- "Nr.sniffed"
+colnames(Acacia_data)[colnames(Acacia_data) == "Group Size"] <- "Group.size"
+colnames(Acacia_data)[colnames(Acacia_data) == "Lick (Nr times)"] <- "Nr.licked"
+colnames(Acacia_data)[colnames(Acacia_data) == "Move/ lift item (Yes/No)/Nr"] <- "Nr.moved"
+colnames(Acacia_data)[colnames(Acacia_data) == "Nr Chewed"] <- "Nr.chewed"
+colnames(Acacia_data)[colnames(Acacia_data) == "Habitat structure"] <- "Habitat.structure"
+colnames(Acacia_data)[colnames(Acacia_data) == "Age Years"] <- "Age"
+
+
+mean(Acacia_data$Exploration.score[Acacia_data$Stimulus == "Baby Bottles"])
+mean(Acacia_data$Exploration.score[Acacia_data$Stimulus == "Takeaway boxes"])
+
+###create age/sex combined variable and plot it
+Acacia_data$Age.sex <- paste(Acacia_data$Age.Category, Acacia_data$Sex)
+
+#both response variables are very skewed
+hist(Acacia_data$nr.grid.appr)
+hist(Acacia_data$Exploration.score)
+#exploratory graphs
+plot(as.factor(Acacia_data$Stimulus), Acacia_data$nr.grid.appr)
+#crossing of factors
+table(Acacia_data$Stimulus, Acacia_data$Age.Category)
+table(Acacia_data$Stimulus, Acacia_data$Individual)
+table(Acacia_data$Stimulus)
+tab_corr(cor_data)
+
+######Ranks for Acacia####
+
+Rank_data <- read_excel("/Users/lindseyellington/MSc thesis/Data for R/Ranks for Acacia.xlsx")
+
+library(dplyr)
+
+# Assuming data1 contains columns 'Individual' and 'Rank'
+# and data2 contains columns 'Individual' and 'Rank'
+
+# Left join data2 with data1 based on the 'Individual' column
+Acacia_data <- left_join(Acacia_data, Rank_data, by = "Individual")
+
+# Update the 'Rank' column in data2 only where it's NA and data1 has a non-NA value
+Acacia_data <- Acacia_data %>%
+  mutate(Rank = ifelse(is.na(Rank.x) & !is.na(Rank.y), Rank.y, Rank.x)) 
+
+
+
+ranks.1 <- glmmTMB(Exploration.score ~ Rank + (1|Individual), data = Acacia_data, family = poisson)                        
+
+summary(ranks.1)           
+
+
+rr <- emmeans(ranks.1, ~ Rank)  # Calculate EMMs for the 'Group.id' variable
+pairs(rr)                        # View pairwise comparisons
+
+ranks.2 <- glmmTMB(nr.grid.appr ~ Rank + (1|Individual), data = Acacia_data, family = poisson)                        
+summary(ranks.2)  
+
+
+
+
+
+####Model3a Acacia analysis of stimuli#####
+Model3a <- glmmTMB(nr.grid.appr~   Stimulus + (1|Individual), data = Acacia_data, family = poisson)
+nullapproach=glmmTMB(nr.grid.appr~1+(1|Individual), data=Acacia_data, family = poisson)
+anova(nullapproach,Model3a, test="Chisq")
+summary(Model3a)    
+overdisp.test(Model3a)
+check_overdispersion(Model3a)
+
+summary(Model3a)    
+overdisp.test(Model3a)
+check_overdispersion(Model3a)
+
+car::vif(Model3a)
+
+summary_Model3a <- summary(Model3a)
+
+#2. Check distribution of random effect
+ranef(Model3a)
+drop1(Model3a, test = "Chisq") #
+# Perform the likelihood ratio test
+lr_test <- anova(Model3a, nullapproach, test = "Chisq")
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+r.squaredGLMM(Model3a)
+
+simulationOutput <- simulateResiduals(fittedModel = Model3a, plot = F)
+plot(simulationOutput)
+
+
+emm <- emmeans(Model3a, ~ Stimulus)  # Calculate EMMs for the 'Group.id' variable
+pairs(emm)    
+
+# Assuming your drop1() call is stored in a variable called drop1_results
+drop1_results <- drop1(Model3a, test = "Chisq")
+
+# Extract results using tidy() and create a table
+table_data <- tidy(drop1_results)
+kable(table_data, format = "markdown")
+
+
+####Model3b Acacia analysis of stimuli#####
+Model3b <- glmmTMB(Exploration.score~Stimulus + (1|Individual), data = Acacia_data, family = poisson)
+nullapproach=glmmTMB(Exploration.score~1+(1|Individual), data=Acacia_data, family = poisson)
+anova(nullapproach,Model3b, test="Chisq")
+summary(Model3b)    
+overdisp.test(Model3b)
+check_overdispersion(Model3b)
+
+summary(Model3b)    
+overdisp.test(Model3b)
+check_overdispersion(Model3b)
+
+car::vif(Model3b)
+summary_Model3b <- summary(Model3b)
+
+  
+
+
+
+
+###overdispersed
+###relevel
+
+Acacia_data$Stimulus <- relevel(as.factor(Acacia_data$Stimulus), ref = "Takeaway boxes")
+
+Model3b <- glmmTMB(Exploration.score ~ Stimulus + (1|Individual), data = Acacia_data, family = nbinom1)
+summary(Model3b)
+nullapproach=glmmTMB(Exploration.score~1+(1|Individual), data=Acacia_data, family = nbinom1)
+anova(nullapproach,Model3b, test="Chisq")
+summary(Model3b)    
+overdisp.test(Model3b)
+check_overdispersion(Model3b)
+
+summary(Model3b)    
+overdisp.test(Model3b)
+check_overdispersion(Model3b)
+#2. Check distribution of random effect
+ranef(Model3b)
+drop1(Model3b, test = "Chisq") #
+# Perform the likelihood ratio test
+lr_test <- anova(Model3b, nullapproach, test = "Chisq")
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+r.squaredGLMM(Model3b)
+
+emm <- emmeans(Model3b, ~ Stimulus, adjust="none")  # Calculate EMMs for the 'Group.id' variable
+pairs(emm)  
+simulationOutput <- simulateResiduals(fittedModel = Model1a, plot = F)
+plot(simulationOutput)
+
+# Calculate mean exploration score for each stimulus
+exploration_mean <- aggregate(Exploration.score ~ Stimulus, data = Acacia_data, FUN = mean)
+
+# Print the table
+print(exploration_mean)
+
+
+###relevel
+
+Acacia_data$Stimulus <- relevel(as.factor(Acacia_data$Stimulus), ref = "Takeaway boxes")
+
+
+
+####plot differences in nr.grid.appr score based on stimulus for Acacia only####
+
+means_stimulustype <- tapply(Acacia_data$Exploration.score,Acacia_data$Stimulus, mean)
+means_stimulustype
+
+cols=c("#009999", "#FFCC66", "#990033", "#CC99FF", "#FF9933", "#669966", "#FF6699", "#0066FF", "#CC0033")
+
+plot(as.factor(Acacia_data$Stimulus), Acacia_data$nr.grid.appr,
+     xlab="Stimulus", ylab="Nr. of grid approaches", boxfill=cols, outline=F)
+stripchart(Acacia_data$nr.grid.appr~as.factor(Acacia_data$Stimulus), vertical = TRUE, data = Acacia_data, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+
+Acacia_data$Stimulus <- as.factor(Acacia_data$Stimulus)
+
+
+Novel.Object=relevel(merged_dataButterflies.seashells$Age.sex, ref = "Juvenile Male")
+resapproachExpl <- glmmTMB(Exploration.score ~Novel.Object + (1|Individual), data = Acacia_data, family = poisson)                        
+summary(resapproachExpl)
+check_overdispersion(resapproachExpl)
+
+
+
+
+table_stats <- tab_model(resapproachExpl)
+# Print the statistical table
+print(table_stats)
+
+#plot differences in exploration score based on stimulus for Acacia only
+
+# Set the font size
+par(cex.lab = 1.5, cex.axis = 1, cex.main = 1.5)
+
+colnames(Acacia_datano0s)[colnames(Acacia_datano0s) == "Exploration score"] <- "Exploration.score"
+means_stimulustype <- tapply(Acacia_datano0s$Exploration.score,Acacia_datano0s$Stimulus, mean)
+means_stimulustype
+
+cols=c("#009999", "#FFCC66", "#990033", "#CC99FF", "#FF9933", "#669966", "#FF6699", "#0066FF", "#CC0033")
+
+plot(as.factor(Acacia_datano0s$Stimulus), Acacia_datano0s$Exploration.score,
+     xlab="Stimulus", ylab="Exploration score", boxfill=cols, outline=F)
+stripchart(Acacia_datano0s$Exploration.score~as.factor(Acacia_datano0s$Stimulus), vertical = TRUE, data = Acacia_data, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+#####figure 4####
+# Set the font size
+par(cex.lab = 1.5, cex.axis = 1.5, cex.main = 1.5)
+
+colnames(Acacia_datano0s)[colnames(Acacia_datano0s) == "Exploration score"] <- "Exploration.score"
+means_stimulus_type <- tapply(Acacia_data$Exploration.score, list(Acacia_data$Stimulus, Acacia_data$Type), mean)
+means_stimulus_type
+
+# Define the colors for each category
+stimulus_colors <- c("#009999", "#FFCC66", "#990033", "#CC99FF", "#FF9933", "#669966", "#FF6699", "#0066FF", "#CC0033")
+type_colors <- c("#FF0000", "#00FF00", "#0000FF")  # Add colors for the "Type" category
+
+# Plot the bar plot with colored columns
+barplot(means_stimulus_type, beside = TRUE, xlab = "Stimulus", ylab = "Mean exploration score", col = stimulus_colors)
+
+
+
+
+#plot differences in exploration score based on age category
+means_exp.age.sex <- tapply(Acacia_data$nr.grid.appr,Acacia_data$Age.sex, mean)
+means_exp.age.sex 
+
+
+
+# Create the plot
+plot(as.factor(Acacia_datano0s$Stimulus), Acacia_datano0s$Exploration.score,
+     xlab = "Stimulus", ylab = "Nr. of exploratory events", boxfill = cols, outline = FALSE)
+stripchart(Acacia_datano0s$Exploration.score ~ as.factor(Acacia_datano0s$Stimulus), 
+           vertical = TRUE, data = Acacia_data, method = "jitter", add = TRUE, pch = 19, col = rgb(0, 0, 0, 0.25))
+
+
+
+# Increase font size of all text elements
+par(cex = 1.5)  # Adjust the cex value to increase or decrease the font size
+
+plot(as.factor(Acacia_data_without0s$Stimulus), Acacia_data_without0s$Exploration.score,
+     xlab = "Stimulus", ylab = "Exploration Score", boxfill = cols, outline = FALSE)
+
+stripchart(Acacia_data$Exploration.score ~ as.factor(Acacia_data$Stimulus), vertical = TRUE, data = Acacia_data, 
+           method = "jitter", add = TRUE, pch = 19, col = rgb(0, 0, 0, 0.25))
+
+hll=0.38
+segments(x0=(1:3)-hll, x1=(1:3)+hll,
+         y0=means_stimulustype,
+         y1=means_stimulustype,
+         col = "black", lty=5)# lines are the means of each group
+
+
+
+
+######## Group Level Analysis #####
+
+##Group level
+## import combined group data data
+
+Combined.group_data <- read_excel("/Users/lindseyellington/MSc thesis/Data files from Sofia/All_indv_including zeros.xlsx")
+
+colnames(Combined.group_data)[colnames(Combined.group_data) == "Exploration score"] <- "Exploration.score"
+colnames(Combined.group_data)[colnames(Combined.group_data) == "Age category"] <- "Age.Category"
+colnames(Combined.group_data)[colnames(Combined.group_data) == "Nr grid appr"] <- "nr.grid.appr"
+colnames(Combined.group_data)[colnames(Combined.group_data) == "Group ID"] <- "Group.ID"
+colnames(Combined.group_data)[colnames(Combined.group_data) == "Group Size"] <- "Group.size"
+colnames(Combined.group_data)[colnames(Combined.group_data) == "Habitat structure"] <- "Habitat.structure"
+
+butterflies.seashells<- Combined.group_data[!grepl("Snail Shells", Combined.group_data$Stimulus), ]
+colnames(butterflies.seashells)[colnames(butterflies.seashells) == "Habitat structure"] <- "Habitat.structure"
+
+butterflies.seashells$Group.ID <- factor(butterflies.seashells$Group.ID)
+butterflies.seashells$Individual <- factor(butterflies.seashells$Individual)
+butterflies.seashells$Stimulus <- factor(butterflies.seashells$Stimulus)
+
+###create age/sex combined variable and plot it
+butterflies.seashells$Age.sex <- paste(butterflies.seashells$Age.Category, butterflies.seashells$Sex)
+
+###Add rank data of Acacia
+merged_dataButterflies.seashells <- left_join(butterflies.seashells, Rank_data, by = "Individual")
+
+# Update the 'Rank' column in data2 only where it's NA and data1 has a non-NA value
+merged_dataButterflies.seashells <- merged_dataButterflies.seashells %>%
+  mutate(Rank = ifelse(is.na(Rank.x) & !is.na(Rank.y), Rank.y, Rank.x)) 
+
+
+merged_dataButterflies.seashells<- merged_dataButterflies.seashells %>%
+  mutate(Rank = na_if(Rank, "N.A"))
+
+
+###Add rank data of Acacia
+merged_dataButterflies.seashellswithNAs <- left_join(butterflies.seashells, Rank_data, by = "Individual")
+
+merged_dataButterflies.seashellswithNAs<- merged_dataButterflies.seashellswithNAs %>%
+  mutate(Rank = na_if(Rank, "N.A"))
+
+###Add rank data of Acacia
+Butterflies.seashells0s <- left_join(butterflies.seashells, Rank_data, by = "Individual")
+
+# Update the 'Rank' column in data2 only where it's NA and data1 has a non-NA value
+Butterflies.seashells0s <- Butterflies.seashells0s %>%
+  mutate(Rank = ifelse(is.na(Rank.x) & !is.na(Rank.y), Rank.y, Rank.x)) 
+
+
+source("/Users/lindseyellington/Downloads/diagnostic_fcns.r")
+overdisp.test()
+plot_model()
+
+#Correlation analysis
+#Determine if measures of curiosity are correlated between them.
+#create subset for matrix
+cor_data<- subset(Combined.group_data, select = c("nr.grid.appr", "Exploration.score"))
+cor_result <- rcorr(as.matrix(cor_data), type = "spearman")
+cor_result$r
+cor_result$P
+
+plot_data1<- cor_data[,c(1:2)]
+ggscatter(plot_data1, x = "nr.grid.appr", y = "Exploration.score", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "spearman",
+          xlab = "Nr. approaches", ylab = "Nr. exploration events")
+
+
+
+##highly correlated 
+
+#both response variables are very skewed
+hist(Combined.group_data$nr.grid.appr)
+hist(Combined.group_data$Exploration.score)
+#exploratory graphs
+plot(as.factor(Combined.group_data$Environment), Combined.group_data$nr.grid.appr)
+#crossing of factors
+table(Combined.group_data$Stimulus, Combined.group_data$Age.Category)
+table(Combined.group_data$Environment, Combined.group_data$Exploration.score)
+table(Combined.group_data$Environment)
+
+
+#plot differences in exploration score based on Sex
+NoNA <- butterflies.seashells[butterflies.seashells$Sex != "N.A", ]
+butterflies.seashells$Age.sex <- paste(butterflies.seashells$Age.Category, butterflies.seashells$Sex)
+
+
+means_exp.sex <- tapply(butterflies.seashells$nr.grid.appr,butterflies.seashells$Sex, mean)
+means_exp.sex
+
+
+# Define colors for the columns
+col_names <- c("lightseagreen", "brown", "darkgoldenrod1")
+
+#plot differences in exploration score based on age category
+means_exp.age <- tapply(NoNA$Exploration.score,NoNA$Age.sex, mean)
+means_exp.age 
+
+# Create the bar plot with colored columns
+barplot(means_exp.age, xlab = "Age and sex", ylab = "Mean exploration score", col = col_names)
+
+
+#plot differences in exploration score based on age category
+means_exp.age.sex <- tapply(NoNA$nr.grid.appr,NoNA$Age.sex, mean)
+
+means_exp.age.sex 
+
+
+# Set the font size
+par(cex.lab = 1.7, cex.axis = 1.7, cex.main = 2)
+
+# Create the barplot
+barplot(means_exp.age.sex, xlab = "Age and sex", ylab = "Mean number of grid approaches", col = col_names)
+
+
+#create a plot with just butterflies 
+
+cols=c("#FFCC66", "#990033", "#CC99FF", "#FF9933", "#669966", "#FF6699", "#0066FF", "#CC0033")
+subset_butterflies <- Combined.group_data[Combined.group_data$Stimulus == "Butterflies", ]
+subset_butterflies <- subset_butterflies[-2, ]
+# Rename the "Urban" category in the "Environment" column to "Semi-Urban"
+subset_butterflies <- subset_butterflies %>%
+  mutate(Environment = ifelse(Environment == "Urban", "Semi-Urban", Environment))
+
+
+
+plot(as.factor(subset_butterflies$Environment), subset_butterflies$nr.grid.appr,
+     xlab="Habitat Type", ylab="Nr. of approaches", boxfill=col_names, outline=F)
+stripchart(subset_butterflies$nr.grid.appr~as.factor(subset_butterflies$Environment), vertical = TRUE, data = subset_butterflies, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+##smaller text
+# Set the graphical parameters to reduce text size
+par(cex.lab = 1, cex.axis = 1, cex.main = 1)
+
+# Create the plot
+plot(as.factor(subset_butterflies$Environment), subset_butterflies$nr.grid.appr,
+     xlab="Habitat Type", ylab="Nr. of approaches", boxfill=col_names, outline=F)
+
+# Add stripchart
+stripchart(subset_butterflies$nr.grid.appr ~ as.factor(subset_butterflies$Environment),
+           vertical = TRUE, data = subset_butterflies, method = "jitter", add = TRUE, pch = 19, col = rgb(0, 0, 0, 0.25))
+
+
+##both
+Seashells.Butterflies_subset <- subset(Combined.group_data, Stimulus != "Snail Shells")
+plot(as.factor(Seashells.Butterflies_subset$Age.sex), Seashells.Butterflies_subset$nr.grid.appr,
+     xlab="Group type", ylab="Nr. of approaches", boxfill=cols, outline=F)
+stripchart(Seashells.Butterflies_subset$nr.grid.appr~as.factor(Seashells.Butterflies_subset$Environment), vertical = TRUE, data = subset_seashells, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+
+# Plot the graph without x-axis labels
+plot(as.factor(Seashells.Butterflies_subset$Group.ID), Seashells.Butterflies_subset$Exploration.score,
+     xlab="Group ID", ylab="Nr. of exploratory events", boxfill=cols, outline=F, xaxt="n")
+
+# Add stripchart with the original factor levels
+stripchart(Seashells.Butterflies_subset$Exploration.score ~ as.factor(Seashells.Butterflies_subset$Group.ID),
+           vertical = TRUE, data = Seashells.Butterflies_subset, method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+# Add custom x-axis labels
+axis(1, at = 1:4, labels = c("Semi-Urban", "Wild1", "Wild2", "Captive"))
+
+
+
+
+plot(as.factor(subset_butterflies$Environment), subset_butterflies$Exploration.score,
+     xlab="Group ID", ylab="Nr. of exploratory events", boxfill=cols, outline=F)
+stripchart(Seashells.Butterflies_subset$Exploration.score~as.factor(Seashells.Butterflies_subset$Group.ID), vertical = TRUE, data = subset_seashells, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+
+plot(subset_butterflies$Environment, subset_butterflies$Exploration.score,
+     xlab = "Group ID", ylab = "Nr. of exploratory events", boxfill = cols, outline = F)
+
+stripchart(Seashells.Butterflies_subset$Exploration.score ~ Seashells.Butterflies_subset$Group.ID,
+           vertical = TRUE, data = subset_seashells,
+           method = "jitter", add = TRUE, pch = 19, col = rgb(0, 0, 0, 0.25))
+
+
+#####Figure 2####
+
+means_age.sex <- tapply(merged_dataButterflies.seashells$nr.grid.appr,merged_dataButterflies.seashells$Age.sex, mean)
+
+par(cex.lab = 1.5, cex.axis = 1, cex.main = 1.5)
+# Assuming 'cols' is a vector of color names for each factor level
+cols <- c("lightskyblue2", "lightgoldenrod1")  # Adjust colors as needed
+
+
+
+plot(as.factor(merged_dataButterflies.seashells$Age.sex), merged_dataButterflies.seashells$nr.grid.appr,
+     xlab="Age and sex", ylab="Nr of approaches", boxfill=cols, outline=F)
+
+
+stripchart(merged_dataButterflies.seashells$nr.grid.appr~ as.factor(merged_dataButterflies.seashells$Age.sex),
+           vertical = TRUE, data = merged_dataButterflies.seashells[merged_dataButterflies.seashells$Environment == "Captive",],
+           pch = 15,
+           bg = "hotpink1",
+           method = "jitter", add = TRUE,
+           col = rgb(0, 0, 0, 0.25),
+           cex = 1.5)
+
+stripchart(merged_dataButterflies.seashells$nr.grid.appr~ as.factor(merged_dataButterflies.seashells$Age.sex),
+           vertical = TRUE, data = merged_dataButterflies.seashells[merged_dataButterflies.seashells$Environment == "Wild",],
+           pch = 15,
+           bg = "hotpink1",
+           method = "jitter", add = TRUE,
+           col = rgb(0, 0, 0, 0.25),
+           cex = 1.5)
+
+# Assuming Acacia_data contains the exploration score in a column named Exploration.score
+# You can adjust the column name accordingly if it's different
+
+# Calculate mean exploration score for each stimulus
+nrappr_mean <- aggregate(nr.grid.appr ~ Age.sex, data = merged_dataButterflies.seashells, FUN = mean)
+
+# Print the table
+print(nrappr_mean)
+
+
+# Add lines for specific means in each box
+means_age_sex <- c(0.35, 0.25, 0.7, 0.5, 0.9142857, 1.5098039)
+factor_levels <- unique(as.factor(NoNA$Age.sex))
+hll <- 0.38
+
+for (i in seq_along(factor_levels)) {
+  lines(x = i + c(-hll, hll),
+        y = rep(means_age_sex[i], 2),
+        col = "black", lty = 5)
+}
+
+
+# Create the ggplot object and specify the data and aesthetics
+p <- ggplot(data = subset_data, aes(x = Age.sex, y = nr.grid.appr)) +
+  # Add the boxplot layer
+  geom_boxplot(aes(fill = Environment), outlier.shape = NA) +  # Remove outliers from the boxplot
+  # Add the jittered points layer
+  geom_jitter(shape = 16, size = 3, alpha = 0.5, color = "black") +
+  # Set x and y axis labels
+  labs(x = "Age and sex", y = "Nr. of approaches") +
+  # Set the plot theme
+  theme_minimal()
+
+# Print the plot
+print(p)
+
+
+#  Models part 1
+
+#####Model 1a: Effect of environment and stimuli type on nr. of approaches between groups#### 
+# Remove rows with missing values in the "Rank" column
+merged_dataButterflies.seashells <- merged_dataButterflies.seashells[complete.cases(merged_dataButterflies.seashells$Rank), ]
+
+##Novel.Object=relevel(merged_dataButterflies.seashells$Age.sex, ref = "Juvenile Male")
+##run model with only butterflies and seashells (nr.grid appr)
+
+Model1a <- glmer(nr.grid.appr ~ Environment+Stimulus + Age.sex + Rank + (1 | Group.ID/Individual) + offset(log(Group.size)), data = merged_dataButterflies.seashells, family = poisson)
+nullapproach=glmer(nr.grid.appr~1+(1 | Group.ID/Individual) + offset(log(Group.size)), data=merged_dataButterflies.seashells, family = poisson)
+anova(nullapproach,Model1a, test="Chisq")
+summary(Model1a)
+drop1(Model1a, test = "Chisq")
+
+r.squaredGLMM(Model1a)
+
+# Perform the likelihood ratio test
+lr_test <- anova(Model1a, nullapproach, test = "Chisq")
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+r.squaredGLMM(Model1a)
+check_overdispersion(Model1a)
+car::vif(Model1a)
+
+AIC(Model1a)
+BIC(Model1a)
+
+emm <- emmeans(Model1a, ~ Rank)  # Calculate EMMs for the 'Group.id' variable
+pairs(emm)    
+
+emm <- emmeans(Model1a, ~ Age.sex, method= "Bonferroni")  # Calculate EMMs for the 'Group.id' variable
+pairs(emm)    
+
+merged_dataButterflies.seashells$Age.sex <- relevel(as.factor(merged_dataButterflies.seashells$Age.sex), ref = "Juvenile Male")
+
+
+simulationOutput <- simulateResiduals(fittedModel = Model1a, plot = F)
+plot(simulationOutput)
+
+###with NAs
+###create age/sex combined variable and plot it
+Butterflies.seashells0s$Age.sex <- paste(Butterflies.seashells0s$Age.Category, Butterflies.seashells0s$Sex)
+
+# Replace N.A with NA in the Value column
+Butterflies.seashells0s$Rank <- gsub("N.A", NA, Butterflies.seashells0s$Rank)
+# Replace N.A with NA in the Value column
+Butterflies.seashells0s$Sex <- gsub("N.A", NA, Butterflies.seashells0s$Sex)
+
+# Replace N.A with NA in the Value column
+Butterflies.seashells0s$Age.Category <- gsub("N.A", NA, Butterflies.seashells0s$Age.Category)
+
+
+
+####run model with only butterflies and seashells (exploration.score)###
+
+#model structure
+Model1b=glmmTMB(Exploration.score~Environment+Stimulus + Age.sex + Rank + (1 | Group.ID/Individual) + offset(log(Group.size)), data=merged_dataButterflies.seashells, family = poisson)
+nullapproach=glmmTMB(Exploration.score~1+(1 | Group.ID/Individual)+offset(log(Group.size)), data=merged_dataButterflies.seashells, family = poisson)
+anova(nullapproach,Model1b, test="Chisq")
+summary(Model1b)
+drop1(Model1b, test = "Chisq")
+# Perform the likelihood ratio test
+lr_test <- anova(Model1b, nullapproach, test = "Chisq")
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+r.squaredGLMM(Model1b)
+
+#1. Overdispersion
+check_overdispersion(Model1b)
+
+car::vif(Model1b)
+
+simulationOutput <- simulateResiduals(fittedModel = Model1b, plot = F)
+plot(simulationOutput)
+
+AIC(Model1b)
+BIC(Model1b)
+
+emm <- emmeans(Model1b, ~ Environment)  # Calculate EMMs for the 'Group.id' variable
+pairs(emm)    
+
+summary_Model1b <- summary(Model1b)
+
+# Assuming your drop1() call is stored in a variable called drop1_results
+drop1_results <- drop1(Model1b, test = "Chisq")
+
+# Extract results using tidy() and create a table
+table_data <- tidy(drop1_results)
+kable(table_data, format = "markdown")
+
+
+###remove infant male
+# Remove rows where the "Age.sex" column contains "Infant Male"
+noinfantmales <- subset(merged_dataButterflies.seashells, !(Age.sex == "Infant Male"))
+
+
+
+
+
+
+
+emm <- emmeans(Model1a, ~ Environment)  # Calculate EMMs for the 'Group.id' variable
+pairs(emm)    
+
+length(unique(merged_dataButterflies.seashells$Individual))
+
+table(merged_dataButterflies.seashells$Age.sex)
+
+# Perform the likelihood ratio test
+lr_test <- anova(Model1b, nullapproach, test = "Chisq")
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+
+r.squaredGLMM(Model1b)
+
+summary(Model1b)
+drop1(Model1b, test = "Chisq") 
+
+subset_data <- butterflies.seashells %>%
+  filter(Environment == "Captive" & Stimulus == "Seashells") %>%
+  summarise(total_score = sum(Exploration.score))
+
+total_score <- subset_data$total_score
+
+
+
+###create age/sex combined variable and plot it
+merged_dataButterflies.seashells$Environment.stim <- paste(merged_dataButterflies.seashells$Environment, merged_dataButterflies.seashells$Stimulus)
+
+Modelmix <- glmer(Exploration.score ~ Environment.stim + (1|Individual) + (1 | Group.ID) + offset(log(Group.size)), data = merged_dataButterflies.seashells, family = poisson)
+
+emm <- emmeans(Modelmix, ~ Environment.stim)
+pairwise_comparisons <- pairs(emm)
+
+
+
+
+
+
+####Figure 3####
+ggplot(merged_dataButterflies.seashells, aes(x = Environment, y = Exploration.score, fill = Stimulus, shape = Group.ID)) +
+  geom_boxplot(
+    position = position_dodge(width = 0.8),
+    width = 0.7,
+    outlier.shape = NA,
+    aes(group = interaction(Group.ID, Stimulus))
+  ) +
+  geom_point(position = position_dodge(width = 0.8), size = 5) +
+  labs(x = "Habitat type", y = "Exploration Score", fill = "Stimulus", shape = "Group.ID") +
+  scale_fill_manual(values = c("maroon", "olivedrab4")) +  # Customize fill colors
+  theme_minimal() +
+  theme(
+    legend.position = "right",  # Move legend to the right
+    text = element_text(size = 20),  # Adjust font size for text
+    axis.title = element_text(size = 20),  # Adjust font size for axis titles
+    axis.text = element_text(size = 20),  # Adjust font size for axis labels
+    legend.text = element_text(size = 20),  # Adjust font size for legend text
+    panel.background = element_blank(),  # Remove panel background
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    plot.background = element_blank()  # Remove plot background
+  ) +
+  guides(
+    fill = guide_legend(
+      override.aes = list(shape = NA),  # Remove legend shapes
+      title = "Stimulus",               # Customize legend title
+      title.position = "top"            # Position legend title at the top
+    )
+  ) +
+  scale_shape_manual(values = c(16, 17, 18, 15),  # Customize point shapes
+                     breaks = c("Kubu", "Lemontree", "Poena", "Acacia"),  # Specify break points
+                     labels = c("Kubu", "Lemontree", "Poena", "Acacia"),  # Specify labels
+                     guide = guide_legend(override.aes = list(size = 3)))  # Customize symbol size
+
+###altered
+means_grouptype <- tapply(merged_dataButterflies.seashells$Exploration.score,merged_dataButterflies.seashells$Group.ID, mean)
+means_grouptype
+
+cols=c("#FFCC66", "#990033","#990033", "#009999")
+
+plot(as.factor(merged_dataButterflies.seashells$Group.ID), merged_dataButterflies.seashells$Exploration.score,
+     xlab="Habitat type", ylab="Exploration score", boxfill=cols, outline=F)
+
+
+stripchart(merged_dataButterflies.seashells$Exploration.score~ as.factor(merged_dataButterflies.seashells$Group.ID),
+           vertical = TRUE, data = merged_dataButterflies.seashells[merged_dataButterflies.seashells$Stimulus == "Butterflies",],
+           pch = 15,
+           bg = "hotpink1",
+           method = "jitter", add = TRUE,
+           col = rgb(0, 0, 0, 0.25),
+           cex = 1.5)
+
+
+
+
+if (any(merged_dataButterflies.seashells$Stimulus == "Seashells")) {
+  stripchart(Group.ID ~ Exploration.score,
+             vertical = FALSE, 
+             data = merged_dataButterflies.seashells[merged_dataButterflies.seashells$Stimulus == "Seashells",],
+             pch = 16,
+             bg = "hotpink1",
+             method = "jitter", 
+             col = rgb(0, 0, 0, 0.25),
+             cex = 1.5,
+             add = TRUE)
+}
+
+
+
+
+hll=0.38
+
+segments(x0=(1:4)-hll, x1=(1:4)+hll,
+         y0=means_grouptype,
+         y1=means_grouptype,
+         col = "black", lty=5)# lines are the means of each group
+
+
+
+
+
+
+
+
+
+##make a plot showing the objects seperated by environment in nr of appr
+
+ggplot1 <- ggplot(butterflies.seashells, aes(x = Stimulus, y = nr.grid.appr, fill = Environment)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Objects", y = "Number of Approaches", fill = "Environment", boxfill = cols) +
+  theme_minimal() +
+  scale_fill_manual(values = c("lightseagreen","darkgoldenrod1","brown")) +
+  theme(panel.background = element_blank(),   # Remove panel background
+        panel.grid = element_blank(),         # Remove panel grid lines
+        axis.line = element_line(colour = "black"),  # Customize axis lines
+        legend.position = "right")            # Move legend to the right
+
+ggplot1
+
+
+
+##make a plot showing the objects seperated by environment in exploration
+ggplot2 <- ggplot(butterflies.seashells, aes(x = Stimulus, y = Exploration.score, fill = Environment)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Objects", y = "Nr of Exploratory Events", fill = "Environment", boxfill = cols) +
+  theme_minimal() +
+  scale_fill_manual(values = c("lightseagreen","darkgoldenrod1","brown")) +
+  theme(panel.background = element_blank(),   # Remove panel background
+        panel.grid = element_blank(),         # Remove panel grid lines
+        axis.line = element_line(colour = "black"),  # Customize axis lines
+        legend.position = "right")         # Move legend to the right
+
+
+
+ggplot2 + ylim(0, max(butterflies.seashells$Exploration.score))
+
+
+ggplot1 <- ggplot(butterflies.seashells, aes(x = Stimulus, y = Exploration.score, fill = Environment)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Objects", y = "Exploration score", fill = "Environment", boxfill = cols) +
+  theme_minimal() +
+  scale_fill_manual(values = c("lightseagreen","brown","darkgoldenrod1")) +
+  theme(panel.background = element_blank(),   # Remove panel background
+        panel.grid = element_blank(),         # Remove panel grid lines
+        axis.line = element_line(colour = "black"),  # Customize axis lines
+        legend.position = "right")            # Move legend to the right
+
+ggplot1 + scale_y_continuous(expand = c(0, 0))
+
+
+
+### Model 1a Plot differences in number of approaches based on group type
+
+# Install and load the required packages
+install.packages("png")  # or install.packages("jpeg")
+library(png)  # or library(jpeg)
+
+# Load custom graphics
+custom_butterfly <- readPNG("/Users/lindseyellington/MSc thesis/Data for R/butterfly.png")
+custom_seashell <- readPNG("/Users/lindseyellington/MSc thesis/Data for R/seashell.png")
+
+
+#####figure 1####
+means_grouptype <- tapply(merged_dataButterflies.seashells$nr.grid.appr,merged_dataButterflies.seashells$Environment, mean)
+means_grouptype
+
+cols=c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+plot(as.factor(merged_dataButterflies.seashells$Environment), merged_dataButterflies.seashells$nr.grid.appr,
+     xlab="Habitat type", ylab="Nr. of approaches", boxfill=cols, outline=F)
+
+
+
+# Subset data to include only "Butterflies" and "Seashells" from the Stimulus column
+subset_data <- merged_dataButterflies.seashells[merged_dataButterflies.seashells$Stimulus %in% c("Butterflies"), ]
+
+# Plot the points for "Butterflies" and "Seashells" based on the Environment
+stripchart(nr.grid.appr ~ Environment,
+           data = subset_data,
+           method = "jitter",
+           pch = 15,
+           col = rgb(0, 0, 0, alpha = 0.5), 
+           cex = 1.5,
+           jitter = 0.4,  # Adjust jittering as needed
+           vertical = TRUE,
+           add = TRUE)
+
+# Subset data to include only "Butterflies" and "Seashells" from the Stimulus column
+subset_data <- merged_dataButterflies.seashells[merged_dataButterflies.seashells$Stimulus %in% c("Seashells"), ]
+
+# Plot the points for "Butterflies" and "Seashells" based on the Environment
+stripchart(nr.grid.appr ~ Environment,
+           data = subset_data,
+           method = "jitter",
+           pch = 16,
+           col = rgb(0, 0, 0, alpha = 0.5),
+           cex = 1.5,
+           jitter = 0.4,  # Adjust jittering as needed
+           vertical = TRUE,
+           add = TRUE)
+
+
+
+
+hll=0.38
+
+segments(x0=(1:3)-hll, x1=(1:3)+hll,
+         y0=means_grouptype,
+         y1=means_grouptype,
+         col = "black", lty=5)# lines are the means of each group
+
+
+
+
+means_grouptype <- tapply(merged_dataButterflies.seashells$nr.grid.appr, merged_dataButterflies.seashells$Environment, mean)
+cols <- c("#009999", "#FFCC66", "#990033", "#CC66FF")
+
+plot(as.factor(merged_dataButterflies.seashells$Environment), merged_dataButterflies.seashells$nr.grid.appr,
+     xlab = "Habitat type", ylab = "Nr. of approaches", boxfill = cols, outline = F)
+
+stripchart(merged_dataButterflies.seashells$nr.grid.appr ~ as.factor(merged_dataButterflies.seashells$Environment), 
+           vertical = TRUE, data = Combined.group_data, 
+           pch = ifelse(merged_dataButterflies.seashells$Stimulus == "Butterflies", 2, 16),
+           size = c(3, 2),
+           method = "jitter", add = TRUE,
+           col = rgb(0, 0, 0, 0.25))
+
+hll <- 0.38
+
+segments(x0 = (1:3) - hll, x1 = (1:3) + hll,
+         y0 = means_grouptype,
+         y1 = means_grouptype,
+         col = "black", lty = 5)
+
+
+
+# Create a plot with the first stripchart (triangles)
+plot(as.factor(merged_dataButterflies.seashells$Environment), merged_dataButterflies.seashells$nr.grid.appr,
+     xlab = "Habitat type", ylab = "Nr. of approaches", boxfill = cols, outline = F)
+
+stripchart(merged_dataButterflies.seashells$nr.grid.appr ~ as.factor(merged_dataButterflies.seashells$Environment),
+           vertical = TRUE, data = Combined.group_data[Combined.group_data$Stimulus == "Butterflies",],
+           pch = 15,
+           bg = "hotpink1",
+           size = 4,
+           method = "jitter", add = TRUE)
+           
+
+# Add a second stripchart (circles)
+stripchart(merged_dataButterflies.seashells$nr.grid.appr ~ as.factor(merged_dataButterflies.seashells$Environment),
+           vertical = TRUE, data = Combined.group_data[Combined.group_data$Stimulus == "Seashells",],
+           pch = 16,
+           bg= "black",
+           size = 2,
+           method = "jitter", add = TRUE)
+           
+
+# Add means and segments as before
+hll <- 0.38
+
+segments(x0 = (1:3) - hll, x1 = (1:3) + hll,
+         y0 = means_grouptype,
+         y1 = means_grouptype,
+         col = "black", lty = 5)
+
+
+############
+
+
+
+
+
+
+# Create a ggplot using triangles for Butterflies and squares for Seashells
+ggplot(merged_dataButterflies.seashells, aes(x = as.factor(Environment), y = nr.grid.appr)) +
+  geom_boxplot () +
+  geom_jitter(aes(shape = Stimulus), position = position_jitter(width = 0.2), size = 4) +
+  scale_shape_manual(values = c(16, 17),  # Customize point shapes
+                     breaks = c("Butterflies", "Seashells"),  # Specify break points
+                     labels = c("Butterflies", "Seashells"),  # Specify labels
+                     guide = guide_legend(override.aes = list(size = 3))) +  # Customize symbol size
+  scale_color_manual(values = cols) +
+  labs(x = "Habitat type", y = "Nr. of approaches") +
+  theme_minimal()
+
+
+### Model 1a Plot group ID
+
+meansgroups <- tapply(Combined.group_data$nr.grid.appr,Combined.group_data$Group.ID, mean)
+meansgroups
+bu <- sort(unique(Combined.group_data$Group.ID))
+
+xlabels <- rep(bu, each=8)
+
+cols=c( "#FFCC66", "#009999", "#990033","#CC66FF","#009933","#6699FF", "#CCFFFF")
+plot(as.factor(Combined.group_data$Group.ID), Combined.group_data$nr.grid.appr,
+     xlab="Group ID", ylab="Nr. of approaches", boxfill=cols, outline=F) 
+# Add data points
+stripchart(Combined.group_data$nr.grid.appr~as.factor(Combined.group_data$Group.ID), vertical = TRUE, data = Combined.group_data, 
+           method = "jitter", add = TRUE, pch = 19, col=rgb(0, 0, 0, 0.25))
+
+
+
+######models part 3 Individual level curiosity – with data from wild, captive and urban vervet monkeys#####
+
+
+### age and sex 
+#####model 2a####
+# Remove rows with missing values in the "Rank" column
+merged_dataButterflies.seashells <- merged_dataButterflies.seashells[complete.cases(merged_dataButterflies.seashells$Rank), ]
+
+Model2a <- glmmTMB(Exploration.score ~Age.sex + Rank + (1 | Group.ID/Individual) + (1 | Stimulus), data = merged_dataButterflies.seashells, family = poisson())
+summary(Model2a)
+nullapproach=glmmTMB(Exploration.score ~1 + (1 | Group.ID/Individual) + (1 | Stimulus), data = merged_dataButterflies.seashells, family = poisson)
+anova(nullapproach, Model2a, test="Chisq")
+# Perform the likelihood ratio test
+lr_test <- anova(Model2a, nullapproach, test = "Chisq")
+summary(lr_test)
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+r.squaredGLMM(Model2a)
+
+check_overdispersion(Model2a)
+
+drop1(Model2a, test = "Chisq") #
+
+car::vif(Model2a)
+######Model 2b#####
+Model2b <- glmmTMB(nr.grid.appr ~Age.sex+ Rank + (1 | Group.ID/Individual) + (1 | Stimulus), data = merged_dataButterflies.seashells, family = poisson())
+summary(Model2b)
+nullapproach=glmmTMB(nr.grid.appr ~1 (1 | Group.ID/Individual) + (1 | Stimulus), data = merged_dataButterflies.seashells, family = poisson)
+anova(nullapproach, Model2b, test="Chisq")
+# Perform the likelihood ratio test
+lr_test <- anova(Model2b, nullapproach, test = "Chisq")
+summary(lr_test)
+
+# Extract the X2 statistic and degrees of freedom
+X2 <- lr_test$Chisq[2]
+df <- lr_test$Df[2]
+
+# Print the X2 statistic and degrees of freedom
+cat("X2 =", X2, ", df =", df, "\n")
+
+r.squaredGLMM(Model2b)
+
+check_overdispersion(Model2b)
+
+drop1(Model2b, test = "Chisq") #
+
+car::vif(Model2b)
+
+# Assuming your data is named merged_dataButterflies.seashells
+summary_table <- Acacia_data %>%
+  group_by(Exploration.score, Stimulus) %>%
+  summarize(Total_exploscore = sum(Exploration.score))
+
+# Print the summary table
+print(summary_Model3b)
+
+
+citation()
+
+
+
+sjPlot::tab_model(Model1a)
+
+
+# Count the number of unique individuals in the dataset
+num_unique_individuals <- length(unique(merged_dataButterflies.seashells$Individual))
+print(num_unique_individuals)
+# Print the result
+cat("Number of unique individuals:", num_unique_individuals, "\n")
+
+
+cite(car)
+
+# Load the required package
+library(openxlsx)
+
+# Assuming Model3b is already defined and stored in a variable
+# Convert the tab_model output to a data frame
+model_output_df <- as.data.frame(Model1a)
+
+# Specify the file path where you want to save the Excel file
+file_path <- "model_output.xlsx"
+
+# Write the data frame to an Excel file
+write.xlsx(model_output_df, file_path)
+
