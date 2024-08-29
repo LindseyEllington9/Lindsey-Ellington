@@ -1,0 +1,291 @@
+---
+title: "Analyses_urban_vervet_curiosity"
+author: "Alba Motes Rodrigo and Lindsey Ellington"
+date: "2024-02-22"
+output: html_document
+---
+```{r}
+library(lme4)
+library(ggpubr)
+library(forcats)
+library(dplyr)
+library(MuMIn)
+library(performance)
+library(readxl)
+library(glmmTMB)
+library(pscl)
+library(sjPlot)
+library(car)
+library(emmeans)
+library(DHARMa)
+#model predictors of exploration score 
+source("/Users/alba/Library/Mobile Documents/com~apple~CloudDocs/R Linear Models/functions/diagnostic_fcns.r")
+
+```
+
+
+```{r}
+rm(list=ls())
+#load data from all inds
+all_data<-read.csv("/Users/alba/Library/Mobile Documents/com~apple~CloudDocs/Stats/Sofia vervet individual project/All_indv_including zeros.csv", na.strings=c("","NA"))
+#correct NAs
+all_data <- as.data.frame(apply(all_data,2,function(x) gsub("N.A",NA,x)))
+#create age.sex variable
+all_data$age.sex<-paste(all_data$Age.category, all_data$Sex, sep=".")
+all_data$age.sex<-as.factor(all_data$age.sex)
+#clean age.sex variable and remove spelling mistakes
+all_data$age.sex[all_data$age.sex=="Infant .Male"]<-"Infant.Male"
+all_data$age.sex[all_data$age.sex=="Juvenile .Female"]<-"Juvenile.Female"
+to_keep<-c("Adult.Female", "Adult.Male", "Juvenile.Female", "Juvenile.Male","Infant.Male", "Infant.Female")
+all_data$Stimulus<-as.factor(all_data$Stimulus)
+all_data$Stimulus[all_data$Stimulus=="Seashells "]<-"Seashells"
+all_data<-all_data[!(all_data$Stimulus %in% ""),]
+all_data$Stimulus<-droplevels(all_data$Stimulus)
+#correct variable type
+all_data$Environment<-as.factor(all_data$Environment)
+all_data$Group.Size<-as.numeric(all_data$Group.Size)
+all_data$Nr.grid.appr<-as.numeric(all_data$Nr.grid.appr)
+all_data$Exploration.score<-as.numeric(all_data$Exploration.score)
+all_data$Rank<-factor(all_data$Rank)
+#check levels stimulus
+levels(all_data$Stimulus)
+levels(all_data$Rank)
+levels(all_data$Environment)
+#add ranks for Urban monkeys
+ranks<-read.csv("/Users/alba/Library/Mobile Documents/com~apple~CloudDocs/Stats/Sofia vervet individual project/Ranks for Acacia.csv")
+all_data<-left_join(all_data, ranks, by = "Individual")
+all_data<-all_data %>% mutate(Rank = coalesce(Rank.x, Rank.y))
+all_data<-all_data[!(all_data$Individual %in% NA),]
+#subset rows with age.sex info and rank
+subset_alldata<-subset(all_data, age.sex %in% to_keep)
+subset_alldata<-subset_alldata[complete.cases(subset_alldata$Rank), ] 
+subset_alldata<-droplevels(subset_alldata)
+
+#calculate age.sew means for plotting
+means_age.sex <-subset_alldata%>%group_by(age.sex)%>%summarise(means=mean(as.numeric(Nr.grid.appr)), median=median(as.numeric(Nr.grid.appr)), n=n())
+table(subset_alldata$age.sex, subset_alldata$Environment)
+
+#subset data with only 2 stimulus for models 1a and 1b
+subset_group<-subset(subset_alldata, Stimulus %in% c("Butterflies", "Seashells"))
+```
+
+#Model 1a
+57 unique individual IDs
+```{r}
+control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000))
+Model1a <- glmer(Nr.grid.appr ~ Environment*Stimulus + age.sex + Rank + (1 | Group.ID/Individual) + offset(log(Group.Size)), data = subset_group, family = poisson, control=control)
+nullapproach=glmer(Nr.grid.appr~1+(1 | Group.ID/Individual) + offset(log(Group.Size)), data=subset_group, family = poisson, control = control)
+anova(nullapproach,Model1a, test="Chisq")
+summary(Model1a)
+drop1(Model1a, test="Chisq")#interaction not significant
+#fit without interaction
+Model1a <- glmer(Nr.grid.appr ~ Environment+Stimulus + age.sex + Rank + (1 | Group.ID/Individual) + offset(log(Group.Size)), data = subset_group, family = poisson, control=control)
+anova(nullapproach,Model1a, test="Chisq")
+summary(Model1a)
+r.squaredGLMM(Model1a)
+check_overdispersion(Model1a)
+simulationOutput <- simulateResiduals(fittedModel = Model1a, plot = F)
+plot(simulationOutput)
+#pairwise comparisons
+emmeans(Model1a, pairwise~Environment)#wild and captive differ, but when adjustment for multiple testing is used, the difference is none significant.
+emmeans(Model1a, pairwise~Stimulus)
+emmeans(Model1a, pairwise~age.sex)#juvenile males more likely to approach that adult females but again, disappeared when corrected
+#generate model table
+tab_model(Model1a)
+testZeroInflation(Model1a)#no
+```
+
+#Model 1b
+```{r}
+control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000))
+Model1b <- glmer(Exploration.score ~ Environment*Stimulus + age.sex + Rank + (1 | Group.ID/Individual) + offset(log(Group.Size)), data = subset_group, family = poisson, control=control)
+nullexplore=glmer(Exploration.score ~ 1 + (1 | Group.ID/Individual) + offset(log(Group.Size)), data = subset_group, family = poisson, control=control)
+anova(nullexplore,Model1b, test="Chisq")
+summary(Model1b)
+drop1(Model1b, test = "Chisq")
+r.squaredGLMM(Model1b)
+check_overdispersion(Model1b)
+simulationOutput <- simulateResiduals(fittedModel = Model1b, plot = F)
+plot(simulationOutput)
+testZeroInflation(Model1b)#no zero inflation
+#pairwise comparisons
+emmeans(Model1b, pairwise~Environment*Stimulus)
+emmeans(Model1b, pairwise~age.sex, adjust="none")#juvenile males more likely to approach that adult females but again, disappeared when corrected
+#generate model table
+tab_model(Model1b)
+```
+
+#Models with just Urban data
+```{r}
+#Load Acacia data
+Acacia_data <- read.csv("/Users/alba/Library/Mobile Documents/com~apple~CloudDocs/Stats/Sofia vervet individual project/Acacia.updated.csv")
+Acacia_data<-subset(Acacia_data, Acacia_data$Stimulus!="")
+Acacia_data<-droplevels(Acacia_data)
+colnames(Acacia_data)[colnames(Acacia_data) == "Exploration score"] <- "Exploration.score"
+colnames(Acacia_data)[colnames(Acacia_data) == "Age category"] <- "Age.Category"
+colnames(Acacia_data)[colnames(Acacia_data) == "Nr grid approaches"] <- "nr.grid.appr"
+colnames(Acacia_data)[colnames(Acacia_data) == "Group Size"] <- "Group.size"
+colnames(Acacia_data)[colnames(Acacia_data) == "Touch (Nr times)"] <- "Nr.touched"
+colnames(Acacia_data)[colnames(Acacia_data) == "Sniff (Nr times)"] <- "Nr.sniffed"
+colnames(Acacia_data)[colnames(Acacia_data) == "Group Size"] <- "Group.size"
+colnames(Acacia_data)[colnames(Acacia_data) == "Lick (Nr times)"] <- "Nr.licked"
+colnames(Acacia_data)[colnames(Acacia_data) == "Move/ lift item (Yes/No)/Nr"] <- "Nr.moved"
+colnames(Acacia_data)[colnames(Acacia_data) == "Nr Chewed"] <- "Nr.chewed"
+colnames(Acacia_data)[colnames(Acacia_data) == "Habitat structure"] <- "Habitat.structure"
+colnames(Acacia_data)[colnames(Acacia_data) == "Age Years"] <- "Age"
+Acacia_data$Stimulus[Acacia_data$Stimulus == "Seashells "] <- "Seashells"
+
+#convert variable types
+Acacia_data$Stimulus<-as.factor(Acacia_data$Stimulus)
+Acacia_data$Group.ID<-as.factor(Acacia_data$Group.ID)
+levels(Acacia_data$Stimulus)
+levels(Acacia_data$Group.ID)#confirmed that only one group
+```
+
+# Model 2a
+```{r}
+Model2a <- glmmTMB(Nr.grid.approaches~ Stimulus + (1|Individual), data = Acacia_data, family = poisson)
+nullapproach=glmmTMB(Nr.grid.approaches~1+(1|Individual), data=Acacia_data, family = poisson)
+anova(nullapproach,Model2a, test="Chisq")
+summary(Model2a)    
+overdisp.test(Model2a)
+check_overdispersion(Model2a)
+simulationOutput <- simulateResiduals(fittedModel = Model2a, plot = F)
+plot(simulationOutput)
+tab_model(Model2a)
+r.squaredGLMM(Model2a)
+```
+
+#Model 2b
+Poisson model was overdispersed (disp.parameter:2.3) so we used nbinom model.
+```{r}
+Acacia_data$Stimulus <- relevel(as.factor(Acacia_data$Stimulus), ref = "Takeaway boxes")
+Model2b <- glmmTMB(Exploration.score~Stimulus + (1|Individual), data = Acacia_data, family = nbinom1)
+nullapproach=glmmTMB(Exploration.score~1+(1|Individual), data=Acacia_data, family = nbinom1)
+anova(nullapproach,Model2b, test="Chisq")
+summary(Model2b)    
+r.squaredGLMM(Model2b)
+overdisp.test(Model2b)
+check_overdispersion(Model2b)
+testDispersion(Model2b)
+simulationOutput <- simulateResiduals(fittedModel = Model2b, plot = F)
+plot(simulationOutput)
+drop1(Model2b, test = "Chisq")
+emmeans(Model2b, pairwise~ Stimulus) #if you adjust for multiple comparisons there are no significant diffs
+tab_model(Model2b)
+
+Acacia_data%>%group_by(Stimulus)%>%summarise(mean=mean(Exploration.score))
+```
+
+#Figure 1
+```{r}
+means_grouptype <- subset_group%>%group_by(Environment)%>%summarise(means=mean(as.numeric(Nr.grid.appr)), median=median(as.numeric(Nr.grid.appr)), n=n())
+table(subset_group$Stimulus, subset_group$Environment)
+
+cols=c("#009999", "#FFCC66", "#990033")
+
+plot(subset_group$Environment, subset_group$Nr.grid.appr,xlab="Habitat type", ylab="Nr of approaches", boxfill=cols, outline=F)
+stripchart(as.numeric(Nr.grid.appr)~ Environment,
+           vertical = T, data = subset_group[subset_group$Stimulus=="Butterflies",],
+           pch = 15,
+           col= alpha("black", 0.5),
+           method = "jitter",
+           jitter = 0.3, add = TRUE,
+           cex = 1.5)
+stripchart(as.numeric(Nr.grid.appr)~ Environment,
+           vertical = T, data = subset_group[subset_group$Stimulus=="Seashells",],
+           pch = 16,
+           col= alpha("darkorange",0.3),
+           method = "jitter",
+           jitter = 0.3, add = TRUE,
+           cex = 1.5)
+legend(3, 5, c("Butterflies", "Seashells"), pch=c(15, 16), bty = "n",  col = c("black", "orange"))
+hll=0.38
+segments(x0=(1:3)-hll, x1=(1:3)+hll,
+         y0=means_grouptype$means,
+         y1=means_grouptype$means,
+         col = "black", lty=5)#
+
+```
+
+#figure 2
+```{r}
+means_age.sex <-subset_group%>%group_by(age.sex)%>%summarise(means=mean(as.numeric(Nr.grid.appr)), median=median(as.numeric(Nr.grid.appr)), n=n())
+table(subset_group$age.sex, subset_group$Environment)
+
+cols <- c("lightskyblue2", "lightgoldenrod1")  # Adjust colors as needed
+plot(subset_group$age.sex, as.numeric(subset_group$Nr.grid.appr),xlab="Age and sex", ylab="Nr of approaches", boxfill=cols, outline=F)
+
+stripchart(as.numeric(Nr.grid.appr)~ age.sex,
+           vertical = T, data = subset_group[subset_group$Environment=="Wild",],
+           pch = 19,
+           col= alpha("#990033", 0.4),
+           method = "jitter",
+           jitter = 0.3, add = TRUE,
+           cex = 1.5)
+
+stripchart(as.numeric(Nr.grid.appr)~ age.sex,
+           vertical = T, data = subset_group[subset_group$Environment=="Captive",],
+           pch = 19,
+           col= alpha("#009999", 0.4),
+           method = "jitter",
+           jitter = 0.2, add = TRUE,
+           cex = 1.5)
+stripchart(as.numeric(Nr.grid.appr)~ age.sex,
+           vertical = T, data = subset_group[subset_group$Environment=="Urban",],
+           pch = 19,
+           col= alpha("#FFCC66", 0.4),
+           method = "jitter",
+           jitter = 0.2, add = TRUE,
+           cex = 1.5)
+
+legend(1, 5, unique(subset_group$Environment), pch=c(19, 19, 19), bty = "n",  col = c("#990033", "#009999", "#FFCC66"))
+hll=0.38
+segments(x0=(1:5)-hll, x1=(1:5)+hll,
+         y0=means_age.sex$means,
+         y1=means_age.sex$means,
+         col = "black", lty=5)#
+
+```
+
+#Figure 3
+```{r}
+levels(subset_group$Stimulus)
+#create combined variable
+subset_group$Envstim<-as.factor(paste(subset_group$Environment, subset_group$Stimulus))
+levels(subset_group$Envstim)
+means_habstim <- subset_group%>%group_by(Envstim)%>%summarise(means=mean(as.numeric(Exploration.score)), median=median(as.numeric(Exploration.score)), n=n())
+
+cols=c("#009999", "#009999", "#FFCC66", "#FFCC66", "#990033", "#990033")
+
+
+plot(subset_group$Envstim, subset_group$Exploration.score,xlab="Habitat type and Stimulus", ylab="Exploration score", boxfill=cols, outline=F)
+stripchart(as.numeric(Exploration.score)~ Envstim,
+           vertical = T, data = subset_group,
+           pch = 16,
+           col= alpha("grey", 0.4),
+           method = "jitter",
+           jitter = 0.2, add = TRUE,
+           cex = 1.5)
+
+hll=0.38
+segments(x0=(1:6)-hll, x1=(1:6)+hll,
+         y0=means_habstim$means,
+         y1=means_habstim$means,
+         col = "black", lty=5)#
+
+```
+
+# Figure 4
+```{r}
+mean_individual_es<-Acacia_data%>%group_by(Stimulus, Individual)%>%summarise(mean=mean(Exploration.score))
+plot(mean_individual_es$Stimulus,mean_individual_es$mean, xlab="Stimulus", ylab="Exploration score", outline=F, boxfill= "slategray1", ylim=c(0,40))
+stripchart(as.numeric(mean)~ Stimulus,
+           vertical = T, data = mean_individual_es,
+           pch = 16,
+           col= alpha("grey", 0.4),
+           method = "jitter",
+           jitter = 0.2, add = TRUE,
+           cex = 1.4)
+```
+
